@@ -91,17 +91,49 @@ $app->post('/directories', function ($request, $response) {
 
     $data = json_decode($request->getBody()->getContents(), true);
 
+    if (!is_array($data)) {
+        $response->getBody()->write(json_encode([
+            'error' => 'Invalid JSON'
+        ]));
+
+        return $response
+            ->withStatus(400)
+            ->withHeader('Content-Type', 'application/json');
+    }
+
     $name = $data['name'] ?? '';
 
     $service = new DirectoryService();
 
-    $result = $service->create($user->getId(), $name);
+    try {
+        $service->create($user->getId(), $name);
+    } catch (InvalidArgumentException $e) {
+        $response->getBody()->write(json_encode([
+            'error' => $e->getMessage()
+        ]));
+
+        return $response
+            ->withStatus(400)
+            ->withHeader('Content-Type', 'application/json');
+    } catch (RuntimeException $e) {
+        $status = $e->getMessage() === 'Directory already exists' ? 409 : 400;
+
+        $response->getBody()->write(json_encode([
+            'error' => $e->getMessage()
+        ]));
+
+        return $response
+            ->withStatus($status)
+            ->withHeader('Content-Type', 'application/json');
+    }
 
     $response->getBody()->write(json_encode([
-        'success' => $result
+        'success' => true
     ]));
 
-    return $response->withHeader('Content-Type', 'application/json');
+    return $response
+        ->withStatus(201)
+        ->withHeader('Content-Type', 'application/json');
 })->add(new AuthMiddleware($entityManager));
 
 $app->delete('/directories', function ($request, $response) {
@@ -110,14 +142,44 @@ $app->delete('/directories', function ($request, $response) {
 
     $data = json_decode($request->getBody()->getContents(), true);
 
+    if (!is_array($data)) {
+        $response->getBody()->write(json_encode([
+            'error' => 'Invalid JSON'
+        ]));
+
+        return $response
+            ->withStatus(400)
+            ->withHeader('Content-Type', 'application/json');
+    }
+
     $name = $data['name'] ?? '';
 
     $service = new DirectoryService();
 
-    $result = $service->delete($user->getId(), $name);
+    try {
+        $service->delete($user->getId(), $name);
+    } catch (InvalidArgumentException $e) {
+        $response->getBody()->write(json_encode([
+            'error' => $e->getMessage()
+        ]));
+
+        return $response
+            ->withStatus(400)
+            ->withHeader('Content-Type', 'application/json');
+    } catch (RuntimeException $e) {
+        $status = $e->getMessage() === 'Directory not found' ? 404 : 400;
+
+        $response->getBody()->write(json_encode([
+            'error' => $e->getMessage()
+        ]));
+
+        return $response
+            ->withStatus($status)
+            ->withHeader('Content-Type', 'application/json');
+    }
 
     $response->getBody()->write(json_encode([
-        'success' => $result
+        'success' => true
     ]));
 
     return $response->withHeader('Content-Type', 'application/json');

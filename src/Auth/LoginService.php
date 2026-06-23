@@ -30,7 +30,7 @@ class LoginService
         $token = bin2hex(random_bytes(32));
 
         
-        $expiresAt = new \DateTimeImmutable('+24 hours');
+        $expiresAt = new \DateTimeImmutable('+1 hour');
 
         $session = new Session($user, $token, $expiresAt);
 
