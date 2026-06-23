@@ -3,6 +3,7 @@
 use Slim\Factory\AppFactory;
 use App\Auth\LoginService;
 use App\Middleware\AuthMiddleware;
+use App\Service\DirectoryService;
 use Psr\Http\Message\ResponseInterface as Response;
 use Psr\Http\Message\ServerRequestInterface as Request;
 
@@ -70,5 +71,56 @@ $app->get('/protected-test', function (Request $request, Response $response) {
         ->withHeader('Content-Type', 'application/json')
         ->withStatus(200);
 })->add(new AuthMiddleware($entityManager));
+
+$app->get('/directories', function ($request, $response) {
+
+    $user = $request->getAttribute('user');
+
+    $service = new DirectoryService();
+
+    $dirs = $service->list($user->getId());
+
+    $response->getBody()->write(json_encode($dirs));
+
+    return $response->withHeader('Content-Type', 'application/json');
+})->add(new AuthMiddleware($entityManager));
+$app->post('/directories', function ($request, $response) {
+
+    $user = $request->getAttribute('user');
+
+    $data = json_decode($request->getBody()->getContents(), true);
+
+    $name = $data['name'] ?? '';
+
+    $service = new DirectoryService();
+
+    $result = $service->create($user->getId(), $name);
+
+    $response->getBody()->write(json_encode([
+        'success' => $result
+    ]));
+
+    return $response->withHeader('Content-Type', 'application/json');
+})->add(new AuthMiddleware($entityManager));
+
+$app->delete('/directories', function ($request, $response) {
+
+    $user = $request->getAttribute('user');
+
+    $data = json_decode($request->getBody()->getContents(), true);
+
+    $name = $data['name'] ?? '';
+
+    $service = new DirectoryService();
+
+    $result = $service->delete($user->getId(), $name);
+
+    $response->getBody()->write(json_encode([
+        'success' => $result
+    ]));
+
+    return $response->withHeader('Content-Type', 'application/json');
+})->add(new AuthMiddleware($entityManager));
+
 
 $app->run();
