@@ -5,6 +5,8 @@ use App\Auth\LoginService;
 use App\Middleware\AuthMiddleware;
 use App\Service\DirectoryService;
 use App\Service\FileService;
+use App\Config\AppConfig;
+use App\Storage\StorageFactory;
 use Psr\Http\Message\ResponseInterface as Response;
 use Psr\Http\Message\ServerRequestInterface as Request;
 
@@ -12,6 +14,8 @@ require __DIR__ . '/../vendor/autoload.php';
 
 $entityManager = require __DIR__ . '/../src/Config/doctrine.php';
 
+$config = AppConfig::load();
+$storage = StorageFactory::create($config);
 $app = AppFactory::create();
 
 $app->get('/ping', function (Request $request, Response $response) {
@@ -73,11 +77,11 @@ $app->get('/protected-test', function (Request $request, Response $response) {
         ->withStatus(200);
 })->add(new AuthMiddleware($entityManager));
 
-$app->get('/directories', function ($request, $response) {
+$app->get('/directories', function ($request, $response) use ($storage) {
 
     $user = $request->getAttribute('user');
 
-    $service = new DirectoryService();
+    $service = new DirectoryService($storage);
 
     $dirs = $service->list($user->getId());
 
@@ -85,7 +89,7 @@ $app->get('/directories', function ($request, $response) {
 
     return $response->withHeader('Content-Type', 'application/json');
 })->add(new AuthMiddleware($entityManager));
-$app->post('/directories', function ($request, $response) {
+$app->post('/directories', function ($request, $response) use ($storage) {
 
     $user = $request->getAttribute('user');
 
@@ -103,7 +107,7 @@ $app->post('/directories', function ($request, $response) {
 
     $name = $data['name'] ?? '';
 
-    $service = new DirectoryService();
+    $service = new DirectoryService($storage);
 
     try {
         $service->create($user->getId(), $name);
@@ -136,7 +140,7 @@ $app->post('/directories', function ($request, $response) {
         ->withHeader('Content-Type', 'application/json');
 })->add(new AuthMiddleware($entityManager));
 
-$app->delete('/directories', function ($request, $response) {
+$app->delete('/directories', function ($request, $response) use ($storage) {
 
     $user = $request->getAttribute('user');
 
@@ -154,7 +158,7 @@ $app->delete('/directories', function ($request, $response) {
 
     $name = $data['name'] ?? '';
 
-    $service = new DirectoryService();
+    $service = new DirectoryService($storage);
 
     try {
         $service->delete($user->getId(), $name);
@@ -185,7 +189,7 @@ $app->delete('/directories', function ($request, $response) {
     return $response->withHeader('Content-Type', 'application/json');
 })->add(new AuthMiddleware($entityManager));
 
-$app->post('/files/upload', function (Request $request, Response $response) {
+$app->post('/files/upload', function (Request $request, Response $response) use ($storage) {
     $user = $request->getAttribute('user');
 
     $uploadedFiles = $request->getUploadedFiles();
@@ -204,7 +208,7 @@ $app->post('/files/upload', function (Request $request, Response $response) {
     }
 
     try {
-        $service = new FileService();
+        $service = new FileService($storage);
 
         $fileName = $service->upload(
             $user->getId(),
@@ -232,19 +236,19 @@ $app->post('/files/upload', function (Request $request, Response $response) {
     }
 })->add(new AuthMiddleware($entityManager));
 
-$app->get('/files/download', function (Request $request, Response $response) {
+$app->get('/files/download', function (Request $request, Response $response) use ($storage) {
     $user = $request->getAttribute('user');
 
     $params = $request->getQueryParams();
     $path = $params['path'] ?? '';
 
     try {
-        $service = new FileService();
-        $filePath = $service->download($user->getId(), $path);
+        $service = new FileService($storage);
 
-        $fileName = basename($filePath);
+        $fileContent = $service->download($user->getId(), $path);
+        $fileName = basename($path);
 
-        $response->getBody()->write(file_get_contents($filePath));
+        $response->getBody()->write($fileContent);
 
         return $response
             ->withHeader('Content-Type', 'application/octet-stream')
@@ -254,7 +258,7 @@ $app->get('/files/download', function (Request $request, Response $response) {
     } catch (Throwable $e) {
         $response->getBody()->write(json_encode([
             'error' => $e->getMessage()
-        ]));
+        ], JSON_UNESCAPED_UNICODE));
 
         return $response
             ->withStatus(404)
@@ -262,7 +266,7 @@ $app->get('/files/download', function (Request $request, Response $response) {
     }
 })->add(new AuthMiddleware($entityManager));
 
-$app->put('/files/rename', function (Request $request, Response $response) {
+$app->put('/files/rename', function (Request $request, Response $response) use ($storage) {
     $user = $request->getAttribute('user');
 
     $data = json_decode($request->getBody()->getContents(), true);
@@ -271,7 +275,7 @@ $app->put('/files/rename', function (Request $request, Response $response) {
     $newName = $data['new_name'] ?? '';
 
     try {
-        $service = new FileService();
+        $service = new FileService($storage);
 
         $service->rename($user->getId(), $oldPath, $newName);
 
@@ -294,7 +298,7 @@ $app->put('/files/rename', function (Request $request, Response $response) {
     }
 })->add(new AuthMiddleware($entityManager));
 
-$app->post('/files/replace', function (Request $request, Response $response) {
+$app->post('/files/replace', function (Request $request, Response $response) use ($storage) {
     $user = $request->getAttribute('user');
 
     $uploadedFiles = $request->getUploadedFiles();
@@ -313,7 +317,7 @@ $app->post('/files/replace', function (Request $request, Response $response) {
     }
 
     try {
-        $service = new FileService();
+        $service = new FileService($storage);
 
         $service->replace(
             $user->getId(),
