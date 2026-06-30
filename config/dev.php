@@ -7,7 +7,7 @@ return [
     ],
 
     'storage' => [
-        'type' => 'local',
+        'type' => 's3',
 
         'local' => [
             'base_path' => __DIR__ . '/../storage',

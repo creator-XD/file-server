@@ -9,7 +9,8 @@
         "doctrine/orm": "^3.6",
         "doctrine/dbal": "^4.4",
         "symfony/cache": "^7.4",
-        "symfony/console": "^7.4"
+        "symfony/console": "^7.4",
+        "aws/aws-sdk-php": "^3.386"
     },
     "autoload": {
         "psr-4": {
