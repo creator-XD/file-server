@@ -2,3 +2,5 @@ vendor/
 .env
 storage/*
 !storage/.gitkeep
+/var/log/*
+!/var/log/.gitkeep

@@ -6,9 +6,11 @@ use Doctrine\ORM\ORMSetup;
 
 require_once __DIR__ . '/../../vendor/autoload.php';
 
+$isDevMode = true;
+
 $config = ORMSetup::createAttributeMetadataConfiguration(
     paths: [__DIR__ . '/../Entity'],
-    isDevMode: true
+    isDevMode: $isDevMode
 );
 
 $connection = DriverManager::getConnection([
