@@ -19,4 +19,12 @@ interface StorageInterface
     public function renameFile(int $userId, string $oldPath, string $newName): void;
 
     public function replaceFile(int $userId, string $filePath, UploadedFileInterface $newFile): void;
+
+    public function saveBlob(string $storageKey, string $content): void;
+
+    public function readBlob(string $storageKey): string;
+
+    public function deleteBlob(string $storageKey): void;
+
+    public function blobExists(string $storageKey): bool;
 }

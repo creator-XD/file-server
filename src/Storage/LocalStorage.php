@@ -226,4 +226,63 @@ final class LocalStorage implements StorageInterface
 
         $newFile->moveTo($targetPath);
     }
+    private function getBlobFullPath(string $storageKey): string
+    {
+        $storageKey = $this->normalizePath($storageKey);
+
+        if ($storageKey === '') {
+            throw new \InvalidArgumentException('Storage key is empty');
+        }
+
+        return $this->basePath . '/' . $storageKey;
+    }
+
+    public function saveBlob(string $storageKey, string $content): void
+    {
+        $fullPath = $this->getBlobFullPath($storageKey);
+
+        $directory = dirname($fullPath);
+
+        if (!is_dir($directory)) {
+            mkdir($directory, 0777, true);
+        }
+
+        if (file_put_contents($fullPath, $content) === false) {
+            throw new \RuntimeException('Cannot save blob');
+        }
+    }
+
+    public function readBlob(string $storageKey): string
+    {
+        $fullPath = $this->getBlobFullPath($storageKey);
+
+        if (!is_file($fullPath)) {
+            throw new \RuntimeException('Blob not found');
+        }
+
+        $content = file_get_contents($fullPath);
+
+        if ($content === false) {
+            throw new \RuntimeException('Cannot read blob');
+        }
+
+        return $content;
+    }
+
+    public function deleteBlob(string $storageKey): void
+    {
+        $fullPath = $this->getBlobFullPath($storageKey);
+
+        if (is_file($fullPath)) {
+            unlink($fullPath);
+        }
+    }
+
+    public function blobExists(string $storageKey): bool
+    {
+        $fullPath = $this->getBlobFullPath($storageKey);
+
+        return is_file($fullPath);
+    }
+
 }

@@ -362,4 +362,67 @@ final class S3Storage implements StorageInterface
             'Body' => $stream->getContents(),
         ]);
     }
+    public function saveBlob(string $storageKey, string $content): void
+    {
+        $storageKey = $this->normalizePath($storageKey);
+
+        if ($storageKey === '') {
+            throw new \InvalidArgumentException('Storage key is empty');
+        }
+
+        $this->client->putObject([
+            'Bucket' => $this->bucket,
+            'Key' => $storageKey,
+            'Body' => $content,
+        ]);
+    }
+
+    public function readBlob(string $storageKey): string
+    {
+        $storageKey = $this->normalizePath($storageKey);
+
+        if ($storageKey === '') {
+            throw new \InvalidArgumentException('Storage key is empty');
+        }
+
+        if (!$this->objectExists($storageKey)) {
+            throw new \RuntimeException('Blob not found');
+        }
+
+        $result = $this->client->getObject([
+            'Bucket' => $this->bucket,
+            'Key' => $storageKey,
+        ]);
+
+        return $result['Body']->getContents();
+    }
+
+    public function deleteBlob(string $storageKey): void
+    {
+        $storageKey = $this->normalizePath($storageKey);
+
+        if ($storageKey === '') {
+            throw new \InvalidArgumentException('Storage key is empty');
+        }
+
+        if (!$this->objectExists($storageKey)) {
+            return;
+        }
+
+        $this->client->deleteObject([
+            'Bucket' => $this->bucket,
+            'Key' => $storageKey,
+        ]);
+    }
+
+    public function blobExists(string $storageKey): bool
+    {
+        $storageKey = $this->normalizePath($storageKey);
+
+        if ($storageKey === '') {
+            throw new \InvalidArgumentException('Storage key is empty');
+        }
+
+        return $this->objectExists($storageKey);
+    }
 }
