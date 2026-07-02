@@ -3,8 +3,10 @@
 use Slim\Factory\AppFactory;
 use App\Auth\LoginService;
 use App\Middleware\AuthMiddleware;
+use App\Middleware\RequestLoggingMiddleware;
 use App\Service\DirectoryService;
 use App\Service\FileService;
+use App\Config\LoggerFactory;
 use App\Config\AppConfig;
 use App\Storage\StorageFactory;
 use Psr\Http\Message\ResponseInterface as Response;
@@ -16,7 +18,10 @@ $entityManager = require __DIR__ . '/../src/Config/doctrine.php';
 
 $config = AppConfig::load();
 $storage = StorageFactory::create($config);
+$logger = LoggerFactory::create($config);
 $app = AppFactory::create();
+
+$app->add(new RequestLoggingMiddleware($logger));
 
 $app->get('/ping', function (Request $request, Response $response) {
     $data = [
@@ -34,7 +39,7 @@ $app->get('/favicon.ico', function (Request $request, Response $response) {
     return $response->withStatus(204);
 });
 
-$app->post('/login', function (Request $request, Response $response) use ($entityManager) {
+$app->post('/login', function (Request $request, Response $response) use ($entityManager, $logger) {
     $data = json_decode($request->getBody()->getContents(), true);
 
     $login = $data['login'] ?? '';
@@ -42,9 +47,23 @@ $app->post('/login', function (Request $request, Response $response) use ($entit
 
     $service = new LoginService($entityManager);
 
-    $token = $service->login($login, $password);
+    try {
+        $token = $service->login($login, $password);
+    } catch (Throwable $e) {
+        $logger->warning('Login failed', [
+            'login' => $login ?? null,
+            'error' => $e->getMessage(),
+        ]);
+
+        throw $e;
+    }
 
     if (!$token) {
+        $logger->warning('Login failed', [
+            'login' => $login,
+            'error' => 'Invalid credentials',
+        ]);
+
         $response->getBody()->write(json_encode([
             'error' => 'Invalid credentials'
         ]));
@@ -53,6 +72,10 @@ $app->post('/login', function (Request $request, Response $response) use ($entit
             ->withStatus(401)
             ->withHeader('Content-Type', 'application/json');
     }
+
+    $logger->info('User logged in', [
+        'login' => $login,
+    ]);
 
     $response->getBody()->write(json_encode([
         'token' => $token
@@ -77,19 +100,33 @@ $app->get('/protected-test', function (Request $request, Response $response) {
         ->withStatus(200);
 })->add(new AuthMiddleware($entityManager));
 
-$app->get('/directories', function ($request, $response) use ($storage, $entityManager) {
+$app->get('/directories', function ($request, $response) use ($storage, $entityManager, $logger) {
 
     $user = $request->getAttribute('user');
 
-    $service = new DirectoryService($storage, $entityManager);
+    try {
+        $service = new DirectoryService($storage, $entityManager);
 
-    $dirs = $service->list($user->getId());
+        $dirs = $service->list($user->getId());
+    } catch (Throwable $e) {
+        $logger->warning('Directory operation failed', [
+            'user_id' => isset($user) ? $user->getId() : null,
+            'operation' => 'list',
+            'error' => $e->getMessage(),
+        ]);
+
+        throw $e;
+    }
+
+    $logger->info('Directories listed', [
+        'user_id' => $user->getId(),
+    ]);
 
     $response->getBody()->write(json_encode($dirs));
 
     return $response->withHeader('Content-Type', 'application/json');
 })->add(new AuthMiddleware($entityManager));
-$app->post('/directories', function ($request, $response) use ($storage, $entityManager) {
+$app->post('/directories', function ($request, $response) use ($storage, $entityManager, $logger) {
 
     $user = $request->getAttribute('user');
 
@@ -112,6 +149,12 @@ $app->post('/directories', function ($request, $response) use ($storage, $entity
     try {
         $service->create($user->getId(), $name);
     } catch (InvalidArgumentException $e) {
+        $logger->warning('Directory operation failed', [
+            'user_id' => isset($user) ? $user->getId() : null,
+            'operation' => 'create',
+            'error' => $e->getMessage(),
+        ]);
+
         $response->getBody()->write(json_encode([
             'error' => $e->getMessage()
         ]));
@@ -120,6 +163,12 @@ $app->post('/directories', function ($request, $response) use ($storage, $entity
             ->withStatus(400)
             ->withHeader('Content-Type', 'application/json');
     } catch (RuntimeException $e) {
+        $logger->warning('Directory operation failed', [
+            'user_id' => isset($user) ? $user->getId() : null,
+            'operation' => 'create',
+            'error' => $e->getMessage(),
+        ]);
+
         $status = $e->getMessage() === 'Directory already exists' ? 409 : 400;
 
         $response->getBody()->write(json_encode([
@@ -131,6 +180,11 @@ $app->post('/directories', function ($request, $response) use ($storage, $entity
             ->withHeader('Content-Type', 'application/json');
     }
 
+    $logger->info('Directory created', [
+        'user_id' => $user->getId(),
+        'path' => $name,
+    ]);
+
     $response->getBody()->write(json_encode([
         'success' => true
     ]));
@@ -140,7 +194,7 @@ $app->post('/directories', function ($request, $response) use ($storage, $entity
         ->withHeader('Content-Type', 'application/json');
 })->add(new AuthMiddleware($entityManager));
 
-$app->delete('/directories', function (Request $request, Response $response) use ($storage, $entityManager) {
+$app->delete('/directories', function (Request $request, Response $response) use ($storage, $entityManager, $logger) {
     $user = $request->getAttribute('user');
 
     $params = $request->getQueryParams();
@@ -149,6 +203,11 @@ $app->delete('/directories', function (Request $request, Response $response) use
     try {
         $service = new DirectoryService($storage, $entityManager);
         $service->delete($user->getId(), $path);
+
+        $logger->info('Directory deleted', [
+            'user_id' => $user->getId(),
+            'path' => $path,
+        ]);
 
         $response->getBody()->write(json_encode([
             'message' => 'Directory deleted'
@@ -159,6 +218,12 @@ $app->delete('/directories', function (Request $request, Response $response) use
             ->withHeader('Content-Type', 'application/json');
 
     } catch (\Throwable $e) {
+        $logger->warning('Directory operation failed', [
+            'user_id' => isset($user) ? $user->getId() : null,
+            'operation' => 'delete',
+            'error' => $e->getMessage(),
+        ]);
+
         $response->getBody()->write(json_encode([
             'error' => $e->getMessage()
         ], JSON_UNESCAPED_UNICODE));
@@ -169,7 +234,7 @@ $app->delete('/directories', function (Request $request, Response $response) use
     }
 })->add(new AuthMiddleware($entityManager));
 
-$app->post('/files/upload', function (Request $request, Response $response) use ($storage, $entityManager) {
+$app->post('/files/upload', function (Request $request, Response $response) use ($storage, $entityManager, $logger) {
     $user = $request->getAttribute('user');
 
     $uploadedFiles = $request->getUploadedFiles();
@@ -196,6 +261,12 @@ $app->post('/files/upload', function (Request $request, Response $response) use 
             $uploadedFiles['file']
         );
 
+        $logger->info('File uploaded', [
+            'user_id' => $user->getId(),
+            'directory' => $directory,
+            'file' => $fileName,
+        ]);
+
         $response->getBody()->write(json_encode([
             'message' => 'File uploaded',
             'file' => $fileName
@@ -206,6 +277,12 @@ $app->post('/files/upload', function (Request $request, Response $response) use 
             ->withStatus(201);
 
     } catch (Throwable $e) {
+        $logger->warning('File operation failed', [
+            'user_id' => isset($user) ? $user->getId() : null,
+            'operation' => 'upload',
+            'error' => $e->getMessage(),
+        ]);
+
         $response->getBody()->write(json_encode([
             'error' => $e->getMessage()
         ]));
@@ -216,7 +293,7 @@ $app->post('/files/upload', function (Request $request, Response $response) use 
     }
 })->add(new AuthMiddleware($entityManager));
 
-$app->get('/files/download', function (Request $request, Response $response) use ($storage, $entityManager) {
+$app->get('/files/download', function (Request $request, Response $response) use ($storage, $entityManager, $logger) {
     $user = $request->getAttribute('user');
 
     $params = $request->getQueryParams();
@@ -228,6 +305,11 @@ $app->get('/files/download', function (Request $request, Response $response) use
         $fileContent = $service->download($user->getId(), $path);
         $fileName = basename($path);
 
+        $logger->info('File downloaded', [
+            'user_id' => $user->getId(),
+            'path' => $path,
+        ]);
+
         $response->getBody()->write($fileContent);
 
         return $response
@@ -236,6 +318,12 @@ $app->get('/files/download', function (Request $request, Response $response) use
             ->withStatus(200);
 
     } catch (Throwable $e) {
+        $logger->warning('File operation failed', [
+            'user_id' => isset($user) ? $user->getId() : null,
+            'operation' => 'download',
+            'error' => $e->getMessage(),
+        ]);
+
         $response->getBody()->write(json_encode([
             'error' => $e->getMessage()
         ], JSON_UNESCAPED_UNICODE));
@@ -246,7 +334,7 @@ $app->get('/files/download', function (Request $request, Response $response) use
     }
 })->add(new AuthMiddleware($entityManager));
 
-$app->put('/files/rename', function (Request $request, Response $response) use ($storage, $entityManager) {
+$app->put('/files/rename', function (Request $request, Response $response) use ($storage, $entityManager, $logger) {
     $user = $request->getAttribute('user');
 
     $data = json_decode($request->getBody()->getContents(), true);
@@ -259,6 +347,12 @@ $app->put('/files/rename', function (Request $request, Response $response) use (
 
         $service->rename($user->getId(), $oldPath, $newName);
 
+        $logger->info('File renamed', [
+            'user_id' => $user->getId(),
+            'old_path' => $oldPath,
+            'new_name' => $newName,
+        ]);
+
         $response->getBody()->write(json_encode([
             'message' => 'File renamed'
         ]));
@@ -268,6 +362,12 @@ $app->put('/files/rename', function (Request $request, Response $response) use (
             ->withStatus(200);
 
     } catch (Throwable $e) {
+        $logger->warning('File operation failed', [
+            'user_id' => isset($user) ? $user->getId() : null,
+            'operation' => 'rename',
+            'error' => $e->getMessage(),
+        ]);
+
         $response->getBody()->write(json_encode([
             'error' => $e->getMessage()
         ]));
@@ -278,7 +378,7 @@ $app->put('/files/rename', function (Request $request, Response $response) use (
     }
 })->add(new AuthMiddleware($entityManager));
 
-$app->post('/files/replace', function (Request $request, Response $response) use ($storage, $entityManager) {
+$app->post('/files/replace', function (Request $request, Response $response) use ($storage, $entityManager, $logger) {
     $user = $request->getAttribute('user');
 
     $uploadedFiles = $request->getUploadedFiles();
@@ -305,6 +405,11 @@ $app->post('/files/replace', function (Request $request, Response $response) use
             $uploadedFiles['file']
         );
 
+        $logger->info('File replaced', [
+            'user_id' => $user->getId(),
+            'path' => $path,
+        ]);
+
         $response->getBody()->write(json_encode([
             'message' => 'File replaced'
         ]));
@@ -314,6 +419,12 @@ $app->post('/files/replace', function (Request $request, Response $response) use
             ->withStatus(200);
 
     } catch (Throwable $e) {
+        $logger->warning('File operation failed', [
+            'user_id' => isset($user) ? $user->getId() : null,
+            'operation' => 'replace',
+            'error' => $e->getMessage(),
+        ]);
+
         $response->getBody()->write(json_encode([
             'error' => $e->getMessage()
         ]));
@@ -323,7 +434,7 @@ $app->post('/files/replace', function (Request $request, Response $response) use
             ->withHeader('Content-Type', 'application/json');
     }
 })->add(new AuthMiddleware($entityManager));
-$app->delete('/files', function (Request $request, Response $response) use ($storage, $entityManager) {
+$app->delete('/files', function (Request $request, Response $response) use ($storage, $entityManager, $logger) {
     $user = $request->getAttribute('user');
 
     $params = $request->getQueryParams();
@@ -332,6 +443,11 @@ $app->delete('/files', function (Request $request, Response $response) use ($sto
     try {
         $service = new FileService($storage, $entityManager);
         $service->delete($user->getId(), $path);
+
+        $logger->info('File deleted', [
+            'user_id' => $user->getId(),
+            'path' => $path,
+        ]);
 
         $response->getBody()->write(json_encode([
             'message' => 'File deleted'
@@ -342,6 +458,12 @@ $app->delete('/files', function (Request $request, Response $response) use ($sto
             ->withHeader('Content-Type', 'application/json');
 
     } catch (\Throwable $e) {
+        $logger->warning('File operation failed', [
+            'user_id' => isset($user) ? $user->getId() : null,
+            'operation' => 'delete',
+            'error' => $e->getMessage(),
+        ]);
+
         $response->getBody()->write(json_encode([
             'error' => $e->getMessage()
         ], JSON_UNESCAPED_UNICODE));
