@@ -13,11 +13,13 @@ final class FileService
 {
     private StorageInterface $storage;
     private EntityManagerInterface $entityManager;
+    private UsageService $usageService;
 
-    public function __construct(StorageInterface $storage, EntityManagerInterface $entityManager)
+    public function __construct(StorageInterface $storage, EntityManagerInterface $entityManager, UsageService $usageService)
     {
         $this->storage = $storage;
         $this->entityManager = $entityManager;
+        $this->usageService = $usageService;
     }
 
     public function upload(int $userId, string $directoryPath, UploadedFileInterface $file): string
@@ -60,6 +62,11 @@ final class FileService
         $content = $this->readUploadedFileContent($file);
         $hash = hash('sha256', $content);
         $size = strlen($content);
+        $this->usageService->assertCanUpload(
+            $user,
+            $size
+        );
+        
         $mimeType = $file->getClientMediaType();
 
         $blob = $this->entityManager

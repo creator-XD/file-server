@@ -6,6 +6,7 @@ use App\Middleware\AuthMiddleware;
 use App\Middleware\RequestLoggingMiddleware;
 use App\Service\DirectoryService;
 use App\Service\FileService;
+use App\Service\UsageService;
 use App\Config\LoggerFactory;
 use App\Config\AppConfig;
 use App\Storage\StorageFactory;
@@ -19,6 +20,10 @@ $entityManager = require __DIR__ . '/../src/Config/doctrine.php';
 $config = AppConfig::load();
 $storage = StorageFactory::create($config);
 $logger = LoggerFactory::create($config);
+$usageService = new UsageService(
+    $entityManager,
+    $config
+);
 $app = AppFactory::create();
 
 $app->add(new RequestLoggingMiddleware($logger));
@@ -234,7 +239,7 @@ $app->delete('/directories', function (Request $request, Response $response) use
     }
 })->add(new AuthMiddleware($entityManager));
 
-$app->post('/files/upload', function (Request $request, Response $response) use ($storage, $entityManager, $logger) {
+$app->post('/files/upload', function (Request $request, Response $response) use ($storage, $entityManager, $usageService, $logger) {
     $user = $request->getAttribute('user');
 
     $uploadedFiles = $request->getUploadedFiles();
@@ -253,7 +258,11 @@ $app->post('/files/upload', function (Request $request, Response $response) use 
     }
 
     try {
-        $service = new FileService($storage, $entityManager);
+        $service = new FileService(
+            $storage,
+            $entityManager,
+            $usageService
+        );
 
         $fileName = $service->upload(
             $user->getId(),
@@ -293,14 +302,18 @@ $app->post('/files/upload', function (Request $request, Response $response) use 
     }
 })->add(new AuthMiddleware($entityManager));
 
-$app->get('/files/download', function (Request $request, Response $response) use ($storage, $entityManager, $logger) {
+$app->get('/files/download', function (Request $request, Response $response) use ($storage, $entityManager, $usageService, $logger) {
     $user = $request->getAttribute('user');
 
     $params = $request->getQueryParams();
     $path = $params['path'] ?? '';
 
     try {
-        $service = new FileService($storage, $entityManager);
+        $service = new FileService(
+            $storage,
+            $entityManager,
+            $usageService
+        );
 
         $fileContent = $service->download($user->getId(), $path);
         $fileName = basename($path);
@@ -334,7 +347,7 @@ $app->get('/files/download', function (Request $request, Response $response) use
     }
 })->add(new AuthMiddleware($entityManager));
 
-$app->put('/files/rename', function (Request $request, Response $response) use ($storage, $entityManager, $logger) {
+$app->put('/files/rename', function (Request $request, Response $response) use ($storage, $entityManager, $usageService, $logger) {
     $user = $request->getAttribute('user');
 
     $data = json_decode($request->getBody()->getContents(), true);
@@ -343,7 +356,11 @@ $app->put('/files/rename', function (Request $request, Response $response) use (
     $newName = $data['new_name'] ?? '';
 
     try {
-        $service = new FileService($storage, $entityManager);
+        $service = new FileService(
+            $storage,
+            $entityManager,
+            $usageService
+        );
 
         $service->rename($user->getId(), $oldPath, $newName);
 
@@ -378,7 +395,7 @@ $app->put('/files/rename', function (Request $request, Response $response) use (
     }
 })->add(new AuthMiddleware($entityManager));
 
-$app->post('/files/replace', function (Request $request, Response $response) use ($storage, $entityManager, $logger) {
+$app->post('/files/replace', function (Request $request, Response $response) use ($storage, $entityManager, $usageService, $logger) {
     $user = $request->getAttribute('user');
 
     $uploadedFiles = $request->getUploadedFiles();
@@ -397,7 +414,11 @@ $app->post('/files/replace', function (Request $request, Response $response) use
     }
 
     try {
-        $service = new FileService($storage, $entityManager);
+        $service = new FileService(
+            $storage,
+            $entityManager,
+            $usageService
+        );
 
         $service->replace(
             $user->getId(),
@@ -434,14 +455,18 @@ $app->post('/files/replace', function (Request $request, Response $response) use
             ->withHeader('Content-Type', 'application/json');
     }
 })->add(new AuthMiddleware($entityManager));
-$app->delete('/files', function (Request $request, Response $response) use ($storage, $entityManager, $logger) {
+$app->delete('/files', function (Request $request, Response $response) use ($storage, $entityManager, $usageService, $logger) {
     $user = $request->getAttribute('user');
 
     $params = $request->getQueryParams();
     $path = $params['path'] ?? '';
 
     try {
-        $service = new FileService($storage, $entityManager);
+        $service = new FileService(
+            $storage,
+            $entityManager,
+            $usageService
+        );
         $service->delete($user->getId(), $path);
 
         $logger->info('File deleted', [
@@ -467,6 +492,40 @@ $app->delete('/files', function (Request $request, Response $response) use ($sto
         $response->getBody()->write(json_encode([
             'error' => $e->getMessage()
         ], JSON_UNESCAPED_UNICODE));
+
+        return $response
+            ->withStatus(400)
+            ->withHeader('Content-Type', 'application/json');
+    }
+})->add(new AuthMiddleware($entityManager));
+
+$app->get('/usage', function ($request, $response) use ($usageService, $logger) {
+    $user = $request->getAttribute('user');
+
+    try {
+        $usage = $usageService->getUserUsage($user);
+
+        $logger->info('Usage statistics requested', [
+            'user_id' => $user->getId(),
+        ]);
+
+        $response->getBody()->write(
+            json_encode(
+                $usage,
+                JSON_UNESCAPED_UNICODE
+            )
+        );
+
+        return $response
+            ->withStatus(200)
+            ->withHeader('Content-Type', 'application/json');
+
+    } catch (\Throwable $e) {
+        $response->getBody()->write(
+            json_encode([
+                'error' => $e->getMessage(),
+            ], JSON_UNESCAPED_UNICODE)
+        );
 
         return $response
             ->withStatus(400)

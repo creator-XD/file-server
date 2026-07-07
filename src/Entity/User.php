@@ -22,6 +22,9 @@ class User
     #[ORM\Column(name: 'created_at', type: 'datetime_immutable')]
     private \DateTimeImmutable $createdAt;
 
+    #[ORM\Column(length: 20, options: ['default' => 'free'])]
+    private string $plan = 'free';
+
     public function __construct(string $login, string $passwordHash)
     {
         $this->login = $login;
@@ -47,5 +50,19 @@ class User
     public function getCreatedAt(): \DateTimeImmutable
     {
         return $this->createdAt;
+    }
+    public function getPlan(): string
+    {
+        return $this->plan;
+    }
+    public function setPlan(string $plan): void
+    {
+        $allowedPlans = ['free', 'pro'];
+
+        if (!in_array($plan, $allowedPlans, true)) {
+            throw new \InvalidArgumentException('Unknown plan');
+        }
+
+        $this->plan = $plan;
     }
 }

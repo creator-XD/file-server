@@ -27,4 +27,15 @@ return [
         'level' => 'info',
         'path' => getenv('LOG_PATH') ?: '/var/www/html/var/log/app-prod.log',
     ],
+    'plans' => [
+        'free' => [
+          'storage_limit' => 100 * 1024 * 1024,
+            'max_file_size' => 20 * 1024 * 1024,
+        ],
+
+        'pro' => [
+           'storage_limit' => 1024 * 1024 * 1024,
+          'max_file_size' => 200 * 1024 * 1024,
+        ],
+    ],
 ];

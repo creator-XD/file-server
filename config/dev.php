@@ -27,4 +27,15 @@ return [
         'level' => 'debug',
         'path' => __DIR__ . '/../var/log/app-dev.log',
     ],
+    'plans' => [
+        'free' => [
+          'storage_limit' => 100 * 1024 * 1024,
+            'max_file_size' => 20 * 1024 * 1024,
+        ],
+
+        'pro' => [
+           'storage_limit' => 1024 * 1024 * 1024,
+          'max_file_size' => 200 * 1024 * 1024,
+        ],
+    ],
 ];

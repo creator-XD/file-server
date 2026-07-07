@@ -23,6 +23,10 @@ final class ApiIntegrationTest extends TestCase
 
     public function testFullFileApiFlowWithDeduplication(): void
     {
+        $usageBefore = $this->getUsage();
+
+        $this->assertSame('free', $usageBefore['plan']);
+    
         $this->createDirectory($this->directory);
 
         $content = 'Same integration test content ' . uniqid();
@@ -32,6 +36,10 @@ final class ApiIntegrationTest extends TestCase
 
         $this->uploadFile($this->directory, $firstFileName, $content);
         $this->uploadFile($this->directory, $secondFileName, $content);
+
+        $downloadedContent = $this->downloadFile(
+        $this->directory . '/' . $firstFileName
+        );
 
         $downloadedContent = $this->downloadFile($this->directory . '/' . $firstFileName);
 
@@ -83,6 +91,12 @@ final class ApiIntegrationTest extends TestCase
         );
 
         $this->assertCount(0, $remainingBlobs);
+        $usageAfterCleanup = $this->getUsage();
+
+        $this->assertSame(
+            $usageBefore['used_bytes'],
+            $usageAfterCleanup['used_bytes']
+        );
     }
 
     private function loginAndGetToken(): string
@@ -251,4 +265,31 @@ final class ApiIntegrationTest extends TestCase
             ->getConnection()
             ->fetchAllAssociative($sql, $params);
     }
+    private function getUsage(): array
+    {
+        $response = $this->rawRequest(
+          'GET',
+          '/usage',
+           null,
+          true
+        );
+
+        $this->assertSame(
+           200,
+            $response['status'],
+            $response['body']
+        );
+
+        $data = json_decode(
+        $response['body'],
+            true
+        );
+
+    $this->assertIsArray(
+    $data,
+    'Usage response is not valid JSON: ' . $response['body']
+);
+
+    return $data;
+}
 }
