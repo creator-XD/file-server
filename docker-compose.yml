@@ -2,53 +2,78 @@ services:
   app:
     build: .
     container_name: file_server_app
+
     ports:
       - "8000:8000"
+
     volumes:
       - .:/var/www/html
-      - /var/www/html/vendor
+      - vendor_data:/var/www/html/vendor
+
     depends_on:
-      - db
-      - minio
+      db:
+        condition: service_healthy
+      minio:
+        condition: service_started
+
     environment:
       APP_ENV: dev
+
       DB_HOST: db
       DB_PORT: 5432
       DB_NAME: file_server
       DB_USER: file_user
       DB_PASSWORD: file_password
+
       S3_ENDPOINT: http://minio:9000
       S3_REGION: us-east-1
       S3_BUCKET: file-server
       S3_ACCESS_KEY: minioadmin
       S3_SECRET_KEY: minioadmin
 
+
   db:
     image: postgres:16
     container_name: file_server_db
     restart: always
+
     environment:
       POSTGRES_DB: file_server
       POSTGRES_USER: file_user
       POSTGRES_PASSWORD: file_password
+
     ports:
       - "5432:5432"
+
     volumes:
       - postgres_data:/var/lib/postgresql/data
-  
+
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U file_user -d file_server"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+
   minio:
     image: minio/minio:latest
     container_name: file_server_minio
+
     ports:
       - "9000:9000"
       - "9001:9001"
+
     environment:
       MINIO_ROOT_USER: minioadmin
       MINIO_ROOT_PASSWORD: minioadmin
+
     command: server /data --console-address ":9001"
+
     volumes:
       - minio_data:/data
+
 
 volumes:
   postgres_data:
   minio_data:
+  vendor_data:

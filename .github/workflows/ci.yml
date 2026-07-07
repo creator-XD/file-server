@@ -1,0 +1,77 @@
+name: CI
+
+on:
+  push:
+    branches:
+      - main
+      - master
+
+  pull_request:
+
+jobs:
+  tests:
+    name: Build and Test
+
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Build Docker containers
+        run: docker compose build
+
+      - name: Start Docker containers
+        run: docker compose up -d
+
+      - name: Show containers
+        run: docker compose ps
+
+      - name: Wait for PostgreSQL
+        run: |
+          for i in {1..30}; do
+            if docker compose exec -T db pg_isready -U file_user -d file_server; then
+              echo "PostgreSQL is ready"
+              exit 0
+            fi
+
+            echo "Waiting for PostgreSQL..."
+            sleep 2
+          done
+
+          echo "PostgreSQL did not become ready"
+          exit 1
+
+      - name: Run migrations
+        run: |
+          docker compose exec -T app \
+            vendor/bin/doctrine-migrations migrations:migrate \
+            --configuration=migrations.php \
+            --db-configuration=migrations-db.php \
+            --no-interaction
+
+      - name: Create integration test user
+        run: |
+          docker compose exec -T app \
+            php scripts/create_user.php test_api 123456
+
+      - name: Run unit tests
+        run: |
+          docker compose exec -T app \
+            vendor/bin/phpunit --testsuite Unit
+
+      - name: Run integration tests
+        run: |
+          docker compose exec -T app \
+            vendor/bin/phpunit --testsuite Integration
+
+      - name: Show application logs on failure
+        if: failure()
+        run: |
+          docker compose logs app
+          docker compose logs db
+          docker compose logs minio
+
+      - name: Stop containers
+        if: always()
+        run: docker compose down -v
