@@ -101,11 +101,15 @@ final class ApiIntegrationTest extends TestCase
     private function createDirectory(string $directory): void
     {
         $response = $this->jsonRequest('POST', '/directories', [
-            'name' => $directory,
+           'name' => $directory,
         ], true);
 
-        $this->assertContains($response['status'], [200, 201]);
-    }
+        $this->assertContains(
+          $response['status'],
+          [200, 201],
+          'Create directory failed: ' . $response['body']
+        );
+    }   
 
     private function deleteDirectory(string $directory): void
     {
