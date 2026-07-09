@@ -3,8 +3,10 @@
 namespace Tests\Unit;
 
 use App\Storage\LocalStorage;
+use PHPUnit\Framework\Attributes\TestDox;
 use PHPUnit\Framework\TestCase;
 
+#[TestDox('Локальное хранилище')]
 final class LocalStorageTest extends TestCase
 {
     private string $tempDir;
@@ -24,6 +26,7 @@ final class LocalStorageTest extends TestCase
         $this->deleteDirectoryRecursive($this->tempDir);
     }
 
+    #[TestDox('Создание и получение списка директорий')]
     public function testCreateAndListDirectory(): void
     {
         $this->storage->createDirectory(1, 'docs');
@@ -33,6 +36,7 @@ final class LocalStorageTest extends TestCase
         $this->assertContains('docs', $directories);
     }
 
+    #[TestDox('Создание вложенной директории')]
     public function testCreateNestedDirectory(): void
     {
         $this->storage->createDirectory(1, 'docs/reports');
@@ -43,6 +47,7 @@ final class LocalStorageTest extends TestCase
         $this->assertContains('docs/reports', $directories);
     }
 
+    #[TestDox('Нельзя создать директорию с некорректным путём')]
     public function testCannotCreateDirectoryWithInvalidPath(): void
     {
         $this->expectException(\InvalidArgumentException::class);
@@ -50,6 +55,7 @@ final class LocalStorageTest extends TestCase
         $this->storage->createDirectory(1, '../bad');
     }
 
+    #[TestDox('Сохранение, чтение и удаление blob')]
     public function testSaveReadAndDeleteBlob(): void
     {
         $storageKey = 'blobs/ab/cd/test-hash';
@@ -65,6 +71,7 @@ final class LocalStorageTest extends TestCase
         $this->assertFalse($this->storage->blobExists($storageKey));
     }
 
+    #[TestDox('Чтение отсутствующего blob выбрасывает исключение')]
     public function testReadMissingBlobThrowsException(): void
     {
         $this->expectException(\RuntimeException::class);

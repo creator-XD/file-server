@@ -65,4 +65,28 @@ final class UsageService
             );
         }
     }
+    public function assertCanReplace(
+        User $user,
+        int $oldFileSize,
+        int $newFileSize
+        ): void {
+            $usage = $this->getUserUsage($user);
+
+            if ($newFileSize > $usage['max_file_size_bytes']) {
+            throw new \RuntimeException(
+                'File exceeds maximum allowed size for current plan'
+            );
+        }
+
+        $resultingUsage =
+        $usage['used_bytes']
+        - $oldFileSize
+        + $newFileSize;
+
+        if ($resultingUsage > $usage['storage_limit_bytes']) {
+            throw new \RuntimeException(
+               'Storage limit exceeded'
+            );
+        }
+    }
 }

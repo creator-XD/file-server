@@ -212,6 +212,11 @@ final class FileService
         $hash = hash('sha256', $content);
         $size = strlen($content);
         $mimeType = $newFile->getClientMediaType();
+        $this->usageService->assertCanReplace(
+            $user,
+            $fileEntry->getSize(),
+            $size
+        );
 
         $newBlob = $this->entityManager
             ->getRepository(FileBlob::class)
